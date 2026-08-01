@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Melbourne ↔ Toronto Availability Grid</title>
+<style>
+  :root {
+    --bd: #d7dae0;
+    --bd-strong: #9aa1ac;
+    --bg: #ffffff;
+    --fg: #1c1f24;
+    --muted: #6b7280;
+    --head-bg: #f4f5f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px;
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .sub b { color: var(--fg); }
+
+  .panel {
+    border: 1px solid var(--bd);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  .panel-title {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--muted); margin-bottom: 10px;
+  }
+  .panel-title .tag {
+    text-transform: none; letter-spacing: 0; font-weight: 400;
+    color: var(--muted); margin-left: 6px;
+  }
+  /* Dims the panel you're not currently painting into. Still fully editable. */
+  .panel.dim { background: #fafbfc; }
+
+  /* ---------- categories ---------- */
+  .cats { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .cat {
+    display: flex; align-items: center; gap: 6px;
+    border: 2px solid var(--bd); border-radius: 5px;
+    padding: 4px 6px; background: #fff; cursor: pointer;
+  }
+  .cat.active { border-color: var(--fg); background: #f0f1f3; }
+  .cat input[type=color] {
+    width: 22px; height: 22px; padding: 0; border: 1px solid var(--bd);
+    border-radius: 3px; background: none; cursor: pointer;
+  }
+  .cat input[type=color]:disabled { cursor: default; }
+  .cat input[type=text] {
+    border: none; background: transparent; font: inherit; font-size: 13px;
+    width: 110px; padding: 2px 0; color: var(--fg);
+  }
+  .cat input[type=text]:focus { outline: 1px solid var(--bd-strong); border-radius: 3px; }
+  .cat .del {
+    border: none; background: none; color: var(--muted);
+    cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px;
+  }
+  .cat .del:hover { color: #dc2626; }
+  .cat .hours { font-size: 11px; color: var(--muted); min-width: 26px; text-align: right; }
+
+  button.plain {
+    border: 1px solid var(--bd); background: #fff; border-radius: 5px;
+    padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  button.plain:hover { background: #f4f5f7; }
+  button.primary {
+    border: 1px solid #1c1f24; background: #1c1f24; color: #fff;
+    border-radius: 5px; padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  button.primary:hover { background: #33383f; }
+  .bar-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+  .banner {
+    border: 1px solid #b9dcf5; background: #eaf5fd; color: #14507a;
+    border-radius: 6px; padding: 9px 12px; margin-bottom: 16px; font-size: 13px;
+    display: none;
+  }
+  .banner.show { display: block; }
+
+  /* ---------- tables ---------- */
+  /* Tight enough that both cities fit on screen together. */
+  .grids { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+  .grids > div { min-width: 0; }
+
+  /* Each city's categories sit to the right of its own table; the hour header
+     stays at the top of the table itself. The panel is kept compact so it
+     doesn't tower over a 7-row table and push the second city off screen. */
+  .section-body { display: flex; gap: 12px; align-items: flex-start; }
+  .grid-wrap { flex: 1 1 auto; min-width: 0; overflow-x: auto; padding-bottom: 4px; }
+  .panel.side { flex: 0 0 232px; width: 232px; margin-bottom: 0; padding: 9px; }
+  .panel.side .panel-title { margin-bottom: 7px; }
+  .panel.side .cats { flex-direction: column; align-items: stretch; gap: 4px; }
+  .panel.side .cat { width: 100%; padding: 2px 5px; gap: 5px; }
+  .panel.side .cat input[type=text] { width: 100%; min-width: 0; flex: 1 1 auto; }
+  .panel.side .bar-actions {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 8px;
+  }
+  .panel.side .bar-actions button { padding: 4px 6px; font-size: 12px; }
+
+  @media (max-width: 1250px) {
+    .section-body { flex-direction: column; }
+    .panel.side { flex: 1 1 auto; width: 100%; }
+    .panel.side .cats { flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .panel.side .cat { width: auto; }
+    .panel.side .cat input[type=text] { width: 110px; flex: 0 0 auto; }
+    .panel.side .bar-actions { display: flex; flex-direction: row; flex-wrap: wrap; }
+  }
+  table { border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid var(--bd); }
+  th {
+    background: var(--head-bg); font-weight: 600; font-size: 10px;
+    color: #3a3f47; padding: 3px 1px; text-align: center;
+  }
+  th.day { width: 74px; font-size: 12px; text-align: right; padding-right: 7px; }
+  th.day .date { display: block; font-weight: 400; font-size: 9px; color: var(--muted); }
+  th.day.wk { background: #e2e5ea; }
+  th.day.today { background: #fde8e8; color: #b91c1c; }
+  th.day.today .date { color: #b91c1c; }
+  .localnow { font-weight: 400; font-size: 12px; color: #b91c1c; margin-left: 8px; }
+  button.linkish {
+    border: none; background: none; padding: 0; font: inherit; font-size: 12px;
+    color: #1d4ed8; text-decoration: underline; cursor: pointer;
+  }
+
+  /* Cross-hatch overlay for "blocked" categories, drawn over that half of the
+     cell so a blocked hour reads as unavailable rather than just another colour. */
+  .pat {
+    position: absolute; left: 0; right: 0; pointer-events: none; z-index: 1;
+    background-image:
+      repeating-linear-gradient(45deg,  rgba(0,0,0,.55) 0 1.5px, transparent 1.5px 6px),
+      repeating-linear-gradient(-45deg, rgba(0,0,0,.55) 0 1.5px, transparent 1.5px 6px);
+  }
+  .pat.top  { top: 0;   height: 50%; }
+  .pat.bot  { top: 50%; height: 50%; }
+  .pat.full { top: 0;   height: 100%; }
+
+  .cat .patbtn {
+    border: 1px solid var(--bd); background: #fff; border-radius: 3px;
+    width: 22px; height: 22px; line-height: 1; padding: 0; cursor: pointer;
+    font-size: 13px; color: var(--muted); flex: 0 0 auto;
+  }
+  .cat .patbtn.on { background: #1c1f24; color: #fff; border-color: #1c1f24; }
+
+  /* current-time marker */
+  td.cell { position: relative; }
+  td.cell.nowcell { box-shadow: inset 0 0 0 1px #dc2626; }
+  .nowline {
+    position: absolute; top: 0; bottom: 0; width: 2px;
+    background: #dc2626; pointer-events: none; z-index: 2;
+  }
+  .nowline::before {
+    content: ''; position: absolute; top: -3px; left: -3px;
+    border: 4px solid transparent; border-top-color: #dc2626;
+  }
+  th.hr { width: 46px; }
+  th.hr .end { display: block; font-weight: 400; color: var(--muted); }
+  td.cell { width: 46px; height: 28px; cursor: pointer; background: #fff; padding: 0; }
+  /* Hover marker as a yellow wash over the whole cell rather than a dark
+     outline, which vanished against dark blocked cells and their black hatch.
+     Sits above the hatch and the now-line so it reads on any fill. */
+  td.cell.hl::after {
+    content: '';
+    position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    background: rgba(250, 204, 21, .5);
+    box-shadow: inset 0 0 0 2px #ca8a04;
+    pointer-events: none;
+    z-index: 3;
+  }
+  tbody th.day { background: var(--head-bg); }
+  .noon { border-left: 2px solid var(--bd-strong); }
+  .keyline { display: flex; gap: 18px; font-size: 12px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
+  .keyline .sw {
+    display: inline-block; width: 26px; height: 16px; vertical-align: -3px;
+    border: 1px solid var(--bd); margin-right: 5px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Melbourne ↔ Toronto availability</h1>
+<div class="sub">
+  Two schedules on one grid. Offsets are DST-accurate for the week of <b id="weekOf">…</b>. <span id="offsetNote"></span>
+  <div id="tzNote" style="margin-top:4px"></div>
+</div>
+
+<div class="banner" id="banner"></div>
+
+<div class="bar-actions">
+  <button class="primary" id="share">Copy share link</button>
+  <button class="plain" id="undo" disabled>↶ Undo</button>
+  <button class="plain" id="clearAll">Clear all blocks</button>
+</div>
+<div class="hint" id="paintHint"></div>
+
+<div class="grids" id="grids">
+  <div id="melSection">
+    <h2>Melbourne <span style="font-weight:400;color:var(--muted);font-size:13px">(Australia/Melbourne)</span>
+      <span class="localnow" id="melNow"></span></h2>
+    <div class="section-body">
+      <div class="grid-wrap"><table id="melTable"></table></div>
+      <div class="panel side" id="melPanel">
+        <div class="panel-title">Melbourne categories <span class="tag" id="melTag"></span></div>
+        <div class="cats" id="melCats"></div>
+        <div class="bar-actions" id="melActions"></div>
+      </div>
+    </div>
+  </div>
+  <div id="torSection">
+    <h2>Toronto <span style="font-weight:400;color:var(--muted);font-size:13px">(America/Toronto)</span>
+      <span class="localnow" id="torNow"></span></h2>
+    <div class="section-body">
+      <div class="grid-wrap"><table id="torTable"></table></div>
+      <div class="panel side" id="torPanel">
+        <div class="panel-title">Toronto categories <span class="tag" id="torTag"></span></div>
+        <div class="cats" id="torCats"></div>
+        <div class="bar-actions" id="torActions"></div>
+      </div>
+    </div>
+  </div>
+  <div class="keyline">
+    <span><span class="sw" style="background:#22c55e"></span>full fill = only one city painted this hour</span>
+    <span><span class="sw" style="background:linear-gradient(to bottom,#22c55e 0 50%,#2563eb 50% 100%)"></span>split = both — Melbourne on top, Toronto below</span>
+    <span><span class="sw" style="background:#64748b;background-image:repeating-linear-gradient(45deg,rgba(0,0,0,.55) 0 1.5px,transparent 1.5px 6px),repeating-linear-gradient(-45deg,rgba(0,0,0,.55) 0 1.5px,transparent 1.5px 6px)"></span>cross-hatch = blocked</span>
+    <span>Both grids show both schedules — only the timezone framing differs.</span>
+  </div>
+</div>
+
+<script>
+const MEL = 'Australia/Melbourne';
+const TOR = 'America/Toronto';
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAY_IDX = {Mon:0, Tue:1, Wed:2, Thu:3, Fri:4, Sat:5, Sun:6};
+const STORE = 'tzgrid-mel-tor-v2';
+const SIDE_KEY = 'tzgrid-side';
+const SIDES = ['melbourne', 'toronto'];
+const WEEKEND_BG = '#eceef1';   // unpainted Sat/Sun cells, so weekends read at a glance
+
+/* Fallback if data.json can't be fetched (e.g. opened via file://). */
+const FALLBACK_DATA = {
+  version: 1,
+  categories: {
+    melbourne: [
+      {id:'m1', name:'Free',        color:'#22c55e'},
+      {id:'m2', name:'Sleep',       color:'#ef4444'},
+      {id:'m3', name:'Work',        color:'#f59e0b'},
+      {id:'m4', name:'Maybe / ask', color:'#14b8a6'},
+      {id:'m5', name:'Blocked',     color:'#64748b', pattern:true}
+    ],
+    toronto: [
+      {id:'t1', name:'Free',        color:'#2563eb'},
+      {id:'t2', name:'Sleep',       color:'#a855f7'},
+      {id:'t3', name:'Work',        color:'#eab308'},
+      {id:'t4', name:'Maybe / ask', color:'#ec4899'},
+      {id:'t5', name:'Blocked',     color:'#78350f', pattern:true}
+    ]
+  },
+  blocks: {melbourne: {}, toronto: {}}
+};
+
+/* ---------- timezone helpers ---------- */
+function tzParts(date, tz) {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false, weekday: 'short',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+  const p = {};
+  for (const {type, value} of dtf.formatToParts(date)) p[type] = value;
+  return {y:+p.year, mo:+p.month, d:+p.day, h:(+p.hour)%24, mi:+p.minute, s:+p.second, wd:p.weekday};
+}
+function tzOffset(date, tz) {
+  const p = tzParts(date, tz);
+  return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi, p.s) - date.getTime();
+}
+function wallToUtc(y, mo, d, h, tz) {
+  const guess = Date.UTC(y, mo - 1, d, h);
+  let off = tzOffset(new Date(guess), tz);
+  off = tzOffset(new Date(guess - off), tz);
+  return guess - off;
+}
+
+/* ---------- reference week ---------- */
+const nowMel = tzParts(new Date(), MEL);
+const mondayUTCmark = Date.UTC(nowMel.y, nowMel.mo - 1, nowMel.d) - DAY_IDX[nowMel.wd] * 864e5;
+const weekDates = DAYS.map((_, i) => {
+  const dt = new Date(mondayUTCmark + i * 864e5);
+  return {y: dt.getUTCFullYear(), mo: dt.getUTCMonth() + 1, d: dt.getUTCDate()};
+});
+
+const melToTor = [];
+const torToMel = {};
+/* Toronto rows can straddle two calendar dates: folding a Melbourne week into
+   Toronto time wraps, so the Sunday row holds the tail of one Sunday and the
+   head of the next. Keep every distinct date so the label can say so. */
+const torDates = [];
+for (let d = 0; d < 7; d++) {
+  melToTor[d] = [];
+  for (let h = 0; h < 24; h++) {
+    const wd = weekDates[d];
+    const t = tzParts(new Date(wallToUtc(wd.y, wd.mo, wd.d, h, MEL)), TOR);
+    const td = DAY_IDX[t.wd];
+    melToTor[d][h] = {d: td, h: t.h};
+    torToMel[td + '-' + t.h] = {d, h};
+    if (!torDates[td]) torDates[td] = [];
+    if (!torDates[td].some(x => x.d === t.d && x.mo === t.mo && x.y === t.y)) {
+      torDates[td].push({y: t.y, mo: t.mo, d: t.d});
+    }
+  }
+}
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function shortDate(x) { return x ? x.d + ' ' + MONTHS[x.mo - 1] : ''; }
+function dateLabel(v) {
+  if (!v) return '';
+  const list = Array.isArray(v) ? v : [v];
+  return list.slice()
+    .sort((a, b) => (a.y - b.y) || (a.mo - b.mo) || (a.d - b.d))
+    .map(shortDate).join(' / ');
+}
+
+function hLabel(h) {
+  const x = ((h % 24) + 24) % 24;
+  const ap = x < 12 ? 'AM' : 'PM';
+  return (x % 12 === 0 ? 12 : x % 12) + ap;
+}
+function blockLabel(d, h) { return DAYS[d] + ' ' + hLabel(h) + '–' + hLabel(h + 1); }
+
+/* ---------- state ---------- */
+let cats = {melbourne: [], toronto: []};   // repo-loaded, possibly locally edited
+let cells = {melbourne: {}, toronto: {}};   // both keyed by canonical Melbourne "d-h"
+let side = 'melbourne';                     // which layer clicks paint into
+let activeCat = null;                       // category id within `side`, or null for eraser
+let fromLink = false;
+let userEdited = false;
+let unsavedStash = null;                    // local edits that were never committed
+let repoSide = null;                        // {melbourne: {raw, data}, toronto: {raw, data}}
+
+/* Accepts a per-city file: {version, categories: [...], blocks: {...}} */
+function normaliseSide(j, s) {
+  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+  return {
+    version: 1,
+    categories: (Array.isArray(j && j.categories)
+      ? j.categories
+      : structuredClone(FALLBACK_DATA.categories[s])
+    ).map(c => ({id: c.id, name: c.name, color: c.color, pattern: !!c.pattern})),
+    blocks: isObj(j && j.blocks) ? j.blocks : {}
+  };
+}
+
+/* Legacy combined data.json, kept so previously committed state still loads. */
+function normaliseData(j) {
+  const c = (j && j.categories) || {};
+  const b = (j && j.blocks) || {};
+  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+  return {
+    version: 1,
+    categories: {
+      melbourne: Array.isArray(c.melbourne) ? c.melbourne : structuredClone(FALLBACK_DATA.categories.melbourne),
+      toronto:   Array.isArray(c.toronto)   ? c.toronto   : structuredClone(FALLBACK_DATA.categories.toronto)
+    },
+    blocks: {
+      melbourne: isObj(b.melbourne) ? b.melbourne : {},
+      toronto:   isObj(b.toronto)   ? b.toronto   : {}
+    }
+  };
+}
+
+/* ---------- URL codec ---------- */
+const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
+function b64e(str) {
+  let bin = '';
+  new TextEncoder().encode(str).forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64d(s) {
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  return new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0)));
+}
+function gridString(side) {
+  const idx = {};
+  cats[side].forEach((c, i) => idx[c.id] = i);
+  let g = '';
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      const cid = cells[side][d + '-' + h];
+      const i = (cid !== undefined && idx[cid] !== undefined) ? idx[cid] : -1;
+      g += (i >= 0 && i < 36) ? DIGITS[i] : '.';
+    }
+  }
+  return g;
+}
+function encodeState() {
+  return b64e(JSON.stringify({
+    v: 3,
+    mc: cats.melbourne.map(c => [c.name, c.color.replace('#',''), c.pattern ? 1 : 0]),
+    tc: cats.toronto.map(c => [c.name, c.color.replace('#',''), c.pattern ? 1 : 0]),
+    mg: gridString('melbourne'),
+    tg: gridString('toronto')
+  }));
+}
+function decodeState(token) {
+  const o = JSON.parse(b64d(token));
+  if (!o || (o.v !== 2 && o.v !== 3)) throw new Error('unsupported payload');
+  const build = (list, prefix) => (list || []).map((c, i) => ({
+    id: prefix + i, name: String(c[0]), color: '#' + String(c[1]), pattern: !!c[2]
+  }));
+  const mc = build(o.mc, 'm'), tc = build(o.tc, 't');
+  const spread = (g, list) => {
+    const out = {};
+    for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {
+      const ch = (g || '')[d * 24 + h];
+      const i = DIGITS.indexOf(ch);
+      if (ch && ch !== '.' && i >= 0 && list[i]) out[d + '-' + h] = list[i].id;
+    }
+    return out;
+  };
+  return {
+    cats: {melbourne: mc, toronto: tc},
+    cells: {melbourne: spread(o.mg, mc), toronto: spread(o.tg, tc)}
+  };
+}
+
+/* ---------- undo ---------- */
+/* Snapshots the whole state before a change. One entry per stroke, per
+   category-edit session, and per bulk action -- not per painted cell. */
+const UNDO_LIMIT = 60;
+let undoStack = [];
+function pushUndo() {
+  undoStack.push(JSON.stringify({cats, cells}));
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  refreshUndoButton();
+}
+function undo() {
+  if (!undoStack.length) return;
+  const snap = JSON.parse(undoStack.pop());
+  cats = snap.cats;
+  cells = snap.cells;
+  if (!cats[side].some(c => c.id === activeCat)) {
+    activeCat = cats[side][0] ? cats[side][0].id : null;
+  }
+  touch();
+  refreshUndoButton();
+  repaint();
+}
+function refreshUndoButton() {
+  const b = document.getElementById('undo');
+  if (!b) return;
+  b.disabled = undoStack.length === 0;
+  b.textContent = undoStack.length ? '↶ Undo (' + undoStack.length + ')' : '↶ Undo';
+}
+
+/* ---------- persistence ---------- */
+function save() {
+  // Until the user edits, localStorage must not be overwritten -- otherwise the
+  // committed state would erase unsaved work before it can be offered back.
+  if (!userEdited) return;
+  localStorage.setItem(STORE, JSON.stringify({cats, cells}));
+}
+function touch() {
+  if (userEdited) return;
+  userEdited = true;
+  if (fromLink) {
+    history.replaceState(null, '', location.pathname + location.search);
+    showBanner('You edited the shared grid, so it is saved as your own copy now. Hit <b>Copy share link</b> to send it back.');
+  }
+}
+function showBanner(html) {
+  const b = document.getElementById('banner');
+  b.innerHTML = html;
+  b.classList.add('show');
+}
+
+/* ---------- boot ---------- */
+/* One file per city so each person only ever writes their own half.
+   An export can't carry a stale copy of the other side, and two people
+   committing at once touch different files instead of conflicting. */
+async function fetchSide(name) {
+  try {
+    const res = await fetch(name + '.json', {cache: 'no-store'});
+    if (!res.ok) throw new Error('http ' + res.status);
+    const raw = await res.text();
+    return {raw, data: normaliseSide(JSON.parse(raw), name)};
+  } catch (e) {
+    return null;
+  }
+}
+/* Falls back to the old single data.json so anything already committed carries over. */
+async function fetchLegacy() {
+  try {
+    const res = await fetch('data.json', {cache: 'no-store'});
+    if (!res.ok) throw new Error('http ' + res.status);
+    const j = normaliseData(JSON.parse(await res.text()));
+    return {
+      melbourne: {raw: null, data: {version: 1, categories: j.categories.melbourne, blocks: j.blocks.melbourne}},
+      toronto:   {raw: null, data: {version: 1, categories: j.categories.toronto,   blocks: j.blocks.toronto}}
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function boot() {
+  const [mel, tor] = await Promise.all([fetchSide('melbourne'), fetchSide('toronto')]);
+  let legacy = null;
+  if (!mel || !tor) legacy = await fetchLegacy();
+
+  const fallbackSide = s => ({
+    raw: null,
+    data: {version: 1, categories: structuredClone(FALLBACK_DATA.categories[s]), blocks: {}}
+  });
+  repoSide = {
+    melbourne: mel || (legacy && legacy.melbourne) || fallbackSide('melbourne'),
+    toronto:   tor || (legacy && legacy.toronto)   || fallbackSide('toronto')
+  };
+
+  const token = (location.hash.match(/^#s=(.+)$/) || [])[1];
+  if (token) {
+    // An explicit share link is the one thing that outranks the repo.
+    try {
+      const s = decodeState(token);
+      cats = s.cats; cells = s.cells; fromLink = true;
+    } catch (e) { /* fall through to the committed files */ }
+  }
+
+  if (!fromLink) {
+    /* The committed files are the source of truth: what is deployed is what
+       everyone sees, including the person who deployed it. localStorage is a
+       working buffer, not a competing copy -- otherwise the browser you export
+       from is the one browser that never shows the result of your own commit. */
+    SIDES.forEach(s => {
+      cats[s]  = structuredClone(repoSide[s].data.categories);
+      cells[s] = structuredClone(repoSide[s].data.blocks);
+    });
+
+    // Unsaved local work is offered back rather than silently dropped.
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
+      if (saved && saved.cats && saved.cells &&
+          JSON.stringify({cats: saved.cats, cells: saved.cells}) !== JSON.stringify({cats, cells})) {
+        unsavedStash = {cats: saved.cats, cells: saved.cells};
+      }
+    } catch (e) { /* ignore unreadable local state */ }
+  }
+
+  cats.melbourne = cats.melbourne || [];
+  cats.toronto   = cats.toronto   || [];
+  cells.melbourne = cells.melbourne || {};
+  cells.toronto   = cells.toronto   || {};
+
+  side = localStorage.getItem(SIDE_KEY);
+  if (side !== 'melbourne' && side !== 'toronto') side = 'melbourne';
+  activeCat = cats[side][0] ? cats[side][0].id : null;
+
+  if (fromLink) {
+    showBanner("You're looking at a grid someone shared. Painting makes your own copy — their link is untouched.");
+  } else if (unsavedStash) {
+    renderStashBanner();
+  }
+  renderAll();
+}
+
+/* ---------- tables ---------- */
+function el(tag, attrs, text) {
+  const n = document.createElement(tag);
+  for (const k in (attrs || {})) n.setAttribute(k, attrs[k]);
+  if (text != null) n.textContent = text;
+  return n;
+}
+function buildTable(table, zone) {
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  hr.appendChild(el('th', {class: 'day'}, zone === 'mel' ? 'MEL' : 'TOR'));
+  for (let h = 0; h < 24; h++) {
+    const th = el('th', {class: 'hr' + (h === 12 ? ' noon' : '')});
+    th.innerHTML = hLabel(h) + '<span class="end">' + hLabel(h + 1) + '</span>';
+    hr.appendChild(th);
+  }
+  thead.appendChild(hr);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  for (let d = 0; d < 7; d++) {
+    const tr = document.createElement('tr');
+    // Each table labels its rows with its own local calendar date for this week.
+    const dayTh = el('th', {class: 'day' + (d >= 5 ? ' wk' : '')});
+    dayTh.dataset.day = d;
+    dayTh.innerHTML = DAYS[d] + '<span class="date">' +
+      dateLabel(zone === 'mel' ? weekDates[d] : torDates[d]) + '</span>';
+    tr.appendChild(dayTh);
+    for (let h = 0; h < 24; h++) {
+      const td = el('td', {class: 'cell' + (h === 12 ? ' noon' : '') + (d >= 5 ? ' wk' : '')});
+      td.dataset.d = d; td.dataset.h = h; td.dataset.zone = zone;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+}
+
+const melTable = document.getElementById('melTable');
+const torTable = document.getElementById('torTable');
+buildTable(melTable, 'mel');
+buildTable(torTable, 'tor');
+
+const melCells = {}, torCells = {};
+melTable.querySelectorAll('td.cell').forEach(td => melCells[td.dataset.d + '-' + td.dataset.h] = td);
+torTable.querySelectorAll('td.cell').forEach(td => torCells[td.dataset.d + '-' + td.dataset.h] = td);
+
+for (let d = 0; d < 7; d++) {
+  for (let h = 0; h < 24; h++) {
+    const t = melToTor[d][h];
+    const title = 'Melbourne ' + blockLabel(d, h) + '  →  Toronto ' + blockLabel(t.d, t.h);
+    melCells[d + '-' + h].title = title;
+    torCells[t.d + '-' + t.h].title = title;
+  }
+}
+
+/* ---------- painting ---------- */
+function catById(side, id) { return (cats[side] || []).find(c => c.id === id) || null; }
+function melKeyFrom(td) {
+  const d = +td.dataset.d, h = +td.dataset.h;
+  if (td.dataset.zone === 'mel') return d + '-' + h;
+  const m = torToMel[d + '-' + h];
+  return m ? m.d + '-' + m.h : null;
+}
+function paint(td) {
+  const key = melKeyFrom(td);
+  if (!key) return;
+  touch();
+  if (activeCat === null) delete cells[side][key];
+  else cells[side][key] = activeCat;
+  repaint();
+}
+function repaint() {
+  for (let d = 0; d < 7; d++) {
+    for (let h = 0; h < 24; h++) {
+      const key = d + '-' + h;
+      const mc = catById('melbourne', cells.melbourne[key]);
+      const tc = catById('toronto',   cells.toronto[key]);
+      const t = melToTor[d][h];
+      /* Only split the cell when both cities have something here. A block that
+         only one side painted fills the whole cell, so a Melbourne selection is
+         plainly visible in the Toronto table rather than a 14px sliver.
+         Gradient rather than child halves: percentage heights don't resolve
+         inside a <td>, so painted halves would render at zero height. */
+      let bg, patClass = null;
+      if (mc && tc) {
+        bg = 'linear-gradient(to bottom, ' + mc.color + ' 0 50%, ' + tc.color + ' 50% 100%)';
+      } else if (mc) {
+        bg = mc.color;
+        patClass = mc.pattern ? 'pat full' : null;
+      } else if (tc) {
+        bg = tc.color;
+        patClass = tc.pattern ? 'pat full' : null;
+      } else {
+        bg = null;   // unpainted — each table shades its own weekend rows
+      }
+      [melCells[key], torCells[t.d + '-' + t.h]].forEach(td => {
+        td.style.background = bg || (td.classList.contains('wk') ? WEEKEND_BG : '#ffffff');
+        // Rebuild only the hatch overlays; the "now" line is a sibling and stays.
+        td.querySelectorAll('.pat').forEach(n => n.remove());
+        if (mc && tc) {
+          if (mc.pattern) td.appendChild(el('span', {class: 'pat top'}));
+          if (tc.pattern) td.appendChild(el('span', {class: 'pat bot'}));
+        } else if (patClass) {
+          td.appendChild(el('span', {class: patClass}));
+        }
+      });
+    }
+  }
+  renderCats();
+  save();
+}
+
+let dragging = false;
+document.addEventListener('mouseup', () => dragging = false);
+[melTable, torTable].forEach(tb => {
+  tb.addEventListener('mousedown', e => {
+    const td = e.target.closest('td.cell');
+    if (!td) return;
+    e.preventDefault();
+    dragging = true;
+    pushUndo();          // one undo entry for the whole stroke
+    paint(td);
+  });
+
+  /* Double-click clears that block in the active layer, whatever it holds. */
+  tb.addEventListener('dblclick', e => {
+    const td = e.target.closest('td.cell');
+    if (!td) return;
+    const key = melKeyFrom(td);
+    if (!key) return;
+    pushUndo();
+    touch();
+    delete cells[side][key];
+    repaint();
+  });
+  tb.addEventListener('mouseover', e => {
+    const td = e.target.closest('td.cell');
+    if (!td) return;
+    highlight(td);
+    if (dragging) paint(td);
+  });
+  tb.addEventListener('mouseleave', () => clearHighlight());
+});
+
+let hl = [];
+function clearHighlight() { hl.forEach(n => n.classList.remove('hl')); hl = []; }
+function highlight(td) {
+  clearHighlight();
+  const d = +td.dataset.d, h = +td.dataset.h;
+  const mel = td.dataset.zone === 'mel' ? {d, h} : torToMel[d + '-' + h];
+  if (!mel) return;
+  const t = melToTor[mel.d][mel.h];
+  hl = [melCells[mel.d + '-' + mel.h], torCells[t.d + '-' + t.h]];
+  hl.forEach(n => n.classList.add('hl'));
+}
+
+/* ---------- category panels ---------- */
+/* Updates the selection in place rather than rebuilding the chips, so clicking
+   the name field selects the category *and* keeps the caret for typing. */
+function refreshSelection() {
+  SIDES.forEach(pane => {
+    const box = document.getElementById(pane === 'melbourne' ? 'melCats' : 'torCats');
+    const panel = document.getElementById(pane === 'melbourne' ? 'melPanel' : 'torPanel');
+    const tag = document.getElementById(pane === 'melbourne' ? 'melTag' : 'torTag');
+    const isActive = side === pane;
+    panel.classList.toggle('dim', !isActive);
+    tag.textContent = isActive ? '— currently painting this layer' : '— click a colour to paint this layer';
+    box.querySelectorAll('.cat').forEach(chip => {
+      const id = chip.dataset.catId;
+      const on = isActive && ((id === undefined && activeCat === null) || id === activeCat);
+      chip.classList.toggle('active', !!on);
+    });
+  });
+  renderHint();
+}
+function selectSide(newSide, catId) {
+  side = newSide;
+  activeCat = catId;
+  localStorage.setItem(SIDE_KEY, side);
+  refreshSelection();
+}
+
+function renderCatPanel(pane) {
+  const isActive = side === pane;
+  const box = document.getElementById(pane === 'melbourne' ? 'melCats' : 'torCats');
+  const actions = document.getElementById(pane === 'melbourne' ? 'melActions' : 'torActions');
+  const tag = document.getElementById(pane === 'melbourne' ? 'melTag' : 'torTag');
+  const panel = document.getElementById(pane === 'melbourne' ? 'melPanel' : 'torPanel');
+
+  panel.classList.toggle('dim', !isActive);
+  tag.textContent = isActive ? '— currently painting this layer' : '— click a colour to paint this layer';
+
+  const counts = {};
+  for (const k in cells[pane]) counts[cells[pane][k]] = (counts[cells[pane][k]] || 0) + 1;
+
+  box.innerHTML = '';
+  cats[pane].forEach(c => {
+    const wrap = el('div', {class: 'cat' + (isActive && activeCat === c.id ? ' active' : '')});
+    wrap.dataset.catId = c.id;
+
+    const color = el('input', {type: 'color', value: c.color});
+    // Snapshot once when editing starts, not on every keystroke or colour drag.
+    color.addEventListener('focus', () => pushUndo());
+    color.addEventListener('click', () => selectSide(pane, c.id));
+    color.addEventListener('input', () => { touch(); c.color = color.value; repaint(); });
+    const name = el('input', {type: 'text', value: c.name});
+    name.addEventListener('focus', () => pushUndo());
+    // Selecting here is why refreshSelection exists — a rebuild would drop the caret.
+    name.addEventListener('click', () => selectSide(pane, c.id));
+    name.addEventListener('input', () => { touch(); c.name = name.value; save(); });
+    const pat = el('button', {
+      class: 'patbtn' + (c.pattern ? ' on' : ''),
+      title: c.pattern ? 'Blocked style on — click for solid fill' : 'Show this category as a blocked cross-hatch'
+    }, '⨯');
+    pat.addEventListener('click', ev => {
+      ev.stopPropagation();
+      pushUndo();
+      touch();
+      c.pattern = !c.pattern;
+      repaint();
+    });
+
+    wrap.append(color, name, pat);
+    wrap.addEventListener('click', ev => {
+      if (ev.target.tagName === 'INPUT' || ev.target.classList.contains('del') ||
+          ev.target.classList.contains('patbtn')) return;
+      selectSide(pane, c.id);
+    });
+
+    wrap.appendChild(el('span', {class: 'hours'}, (counts[c.id] || 0) + 'h'));
+
+    const del = el('button', {class: 'del', title: 'Delete category'}, '×');
+    del.addEventListener('click', () => {
+      pushUndo();
+      touch();
+      cats[pane] = cats[pane].filter(x => x.id !== c.id);
+      for (const k in cells[pane]) if (cells[pane][k] === c.id) delete cells[pane][k];
+      if (side === pane && activeCat === c.id) activeCat = cats[pane][0] ? cats[pane][0].id : null;
+      repaint();
+    });
+    wrap.appendChild(del);
+    box.appendChild(wrap);
+  });
+
+  const er = el('div', {class: 'cat' + (isActive && activeCat === null ? ' active' : '')});
+  er.style.borderStyle = 'dashed';
+  er.append(el('span', {}, '🧽 Eraser'));
+  er.addEventListener('click', () => selectSide(pane, null));
+  box.appendChild(er);
+
+  actions.innerHTML = '';
+  const add = el('button', {class: 'plain', title: 'Add a new category'}, '+ Add');
+  add.addEventListener('click', () => {
+    pushUndo();
+    touch();
+    const palette = pane === 'melbourne'
+      ? ['#8b5cf6', '#0ea5e9', '#64748b', '#84cc16']
+      : ['#f97316', '#06b6d4', '#78716c', '#d946ef'];
+    const c = {
+      id: pane[0] + Date.now(),
+      name: 'New category',
+      color: palette[cats[pane].length % palette.length],
+      pattern: false
+    };
+    cats[pane].push(c);
+    selectSide(pane, c.id);
+  });
+
+  const clear = el('button', {class: 'plain',
+    title: 'Clear every block in the ' + pane + ' layer'}, 'Clear');
+  clear.addEventListener('click', () => {
+    if (!confirm('Clear every block painted in the ' + pane + ' layer? The other layer stays.')) return;
+    pushUndo();
+    touch();
+    cells[pane] = {};
+    repaint();
+  });
+
+  const exp = el('button', {class: 'plain',
+    title: 'Download and copy ' + pane + '.json'}, 'Export');
+  exp.addEventListener('click', function () { exportSide(pane, this); });
+
+  const imp = el('button', {class: 'plain',
+    title: 'Load a ' + pane + '.json file from disk'}, 'Import');
+  imp.addEventListener('click', () => importSide(pane));
+
+  const pull = el('button', {class: 'plain',
+    title: 'Replace this city with the committed ' + pane + '.json'}, 'Load repo');
+  pull.addEventListener('click', () => loadSideFromRepo(pane, false));
+
+  actions.append(add, clear, exp, imp, pull);
+}
+function renderCats() {
+  renderCatPanel('melbourne');
+  renderCatPanel('toronto');
+}
+
+function sideJson(s) {
+  return JSON.stringify({version: 1, categories: cats[s], blocks: cells[s]}, null, 2);
+}
+/* Export writes a real file as well as copying, so Import has something to take. */
+function downloadJson(file, text) {
+  const url = URL.createObjectURL(new Blob([text], {type: 'application/json'}));
+  const a = document.createElement('a');
+  a.href = url; a.download = file;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+async function exportSide(s, btn) {
+  const json = sideJson(s);
+  const file = s + '.json';
+  downloadJson(file, json);
+  const flash = ok => {
+    btn.textContent = ok ? '✓ saved + copied' : '✓ saved (⌘C to copy)';
+    setTimeout(() => btn.textContent = label, 2400);
+  };
+  try { await navigator.clipboard.writeText(json); flash(true); }
+  catch (e) { flash(false); }
+}
+
+/* Import replaces one city only — it cannot touch the other side's data. */
+function importSide(s) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'application/json,.json';
+  inp.addEventListener('change', async () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(await f.text());
+    } catch (e) {
+      alert('That file isn\'t valid JSON:\n\n' + e.message);
+      return;
+    }
+    if (!Array.isArray(parsed.categories) || typeof parsed.blocks !== 'object' || !parsed.blocks) {
+      alert('That doesn\'t look like a ' + s + '.json for this grid.\n\n' +
+            'Expected { "version": 1, "categories": [...], "blocks": {...} }.\n' +
+            'If you picked the other city\'s file, the shape is the same — but import it from the other panel.');
+      return;
+    }
+    if (!confirm('Replace the ' + s + ' categories and blocks with "' + f.name + '"? The other city is left alone.')) return;
+    const clean = normaliseSide(parsed, s);
+    pushUndo();
+    touch();
+    cats[s] = clean.categories;
+    cells[s] = clean.blocks;
+    if (side === s) activeCat = cats[s][0] ? cats[s][0].id : null;
+    repaint();
+  });
+  inp.click();
+}
+
+/* ---------- global actions ---------- */
+document.getElementById('share').addEventListener('click', async function () {
+  const url = location.origin + location.pathname + location.search + '#s=' + encodeState();
+  const flash = ok => {
+    this.textContent = ok ? '✓ Link copied' : 'Press ⌘C to copy';
+    setTimeout(() => this.textContent = 'Copy share link', 2200);
+  };
+  try { await navigator.clipboard.writeText(url); flash(true); }
+  catch (e) { window.prompt('Copy this link and send it over:', url); flash(false); }
+});
+
+/* Replaces one city's categories and blocks; the other side is untouched. */
+function loadSideFromRepo(s, skipConfirm) {
+  if (!skipConfirm && !confirm('Replace the ' + s + ' categories and blocks with the committed ' + s + '.json? The other city is left alone.')) return;
+  pushUndo();
+  cats[s]  = structuredClone(repoSide[s].data.categories);
+  cells[s] = structuredClone(repoSide[s].data.blocks);
+  if (side === s) activeCat = cats[s][0] ? cats[s][0].id : null;
+  userEdited = true;   // so the adopted copy is written to localStorage
+  if (fromLink) history.replaceState(null, '', location.pathname + location.search);
+  repaint();
+}
+
+/* Shown when this browser held edits that were never committed. The committed
+   files are already on screen; this just offers the local copy back. */
+function renderStashBanner() {
+  const b = document.getElementById('banner');
+  if (!unsavedStash) { b.classList.remove('show'); return; }
+  b.innerHTML = 'Showing the committed <b>melbourne.json</b> and <b>toronto.json</b>. ' +
+    'This browser also had changes that were never committed. ' +
+    '<button class="plain" id="restoreStash" style="margin-left:6px">Restore my unsaved version</button> ' +
+    '<button class="plain" id="dropStash" style="margin-left:4px">Discard</button>';
+  b.classList.add('show');
+  document.getElementById('restoreStash').addEventListener('click', () => {
+    pushUndo();
+    cats = unsavedStash.cats;
+    cells = unsavedStash.cells;
+    if (!cats[side] || !cats[side].some(c => c.id === activeCat)) {
+      activeCat = cats[side] && cats[side][0] ? cats[side][0].id : null;
+    }
+    unsavedStash = null;
+    userEdited = true;      // it's a deliberate divergence from the repo now
+    b.classList.remove('show');
+    repaint();
+  });
+  document.getElementById('dropStash').addEventListener('click', () => {
+    unsavedStash = null;
+    userEdited = true;      // let the committed state overwrite the stale buffer
+    save();
+    b.classList.remove('show');
+  });
+}
+
+document.getElementById('undo').addEventListener('click', undo);
+
+/* Wipes both weeks so you can start over. Categories stay, and it's undoable. */
+document.getElementById('clearAll').addEventListener('click', () => {
+  const painted = Object.keys(cells.melbourne).length + Object.keys(cells.toronto).length;
+  if (!painted) { alert('Nothing painted yet — both weeks are already empty.'); return; }
+  if (!confirm('Clear all ' + painted + ' painted blocks in both Melbourne and Toronto?\n\n' +
+               'Your categories are kept, and Undo will bring the blocks back.')) return;
+  pushUndo();
+  touch();
+  cells.melbourne = {};
+  cells.toronto = {};
+  repaint();
+});
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+    if (/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) return;  // let inputs undo their own text
+    e.preventDefault();
+    undo();
+  }
+});
+
+function renderHint() {
+  const active = cats[side].find(c => c.id === activeCat);
+  const label = side === 'melbourne' ? 'Melbourne' : 'Toronto';
+  document.getElementById('paintHint').innerHTML =
+    'Painting <b>' + label + '</b> with <b>' + (active ? active.name : 'the eraser') + '</b>. ' +
+    'Click or drag to paint, <b>double-click to erase a block</b>, ⌘/Ctrl+Z to undo. ' +
+    'Clicking a colour in the other panel switches which layer you paint.';
+}
+function renderAll() {
+  renderHint();
+  refreshUndoButton();
+  repaint();
+}
+
+/* ---------- current-time marker ---------- */
+/* A red line in each table at that timezone's own "now", positioned by minute.
+   Re-runs every 30s so it tracks, and rebuilds if the hour or day rolls over. */
+function updateNow() {
+  document.querySelectorAll('.nowline').forEach(n => n.remove());
+  document.querySelectorAll('td.cell.nowcell').forEach(n => n.classList.remove('nowcell'));
+  document.querySelectorAll('th.day.today').forEach(n => n.classList.remove('today'));
+
+  const now = new Date();
+  [[MEL, melTable, melCells, 'melNow'], [TOR, torTable, torCells, 'torNow']].forEach(
+    ([tz, table, cellMap, labelId]) => {
+      const p = tzParts(now, tz);
+      const d = DAY_IDX[p.wd];
+      if (d === undefined) return;
+      const cell = cellMap[d + '-' + p.h];
+      if (cell) {
+        cell.classList.add('nowcell');
+        const line = document.createElement('span');
+        line.className = 'nowline';
+        line.style.left = (p.mi / 60 * 100) + '%';
+        cell.appendChild(line);
+      }
+      const th = table.querySelector('tbody th.day[data-day="' + d + '"]');
+      if (th) th.classList.add('today');
+
+      const label = document.getElementById(labelId);
+      if (label) {
+        const hh = p.h % 12 === 0 ? 12 : p.h % 12;
+        label.textContent = '● now ' + p.wd + ' ' + hh + ':' +
+          String(p.mi).padStart(2, '0') + (p.h < 12 ? 'am' : 'pm');
+      }
+    });
+}
+
+/* ---------- put the viewer's own city on top ---------- */
+function orderGrids() {
+  const grids = document.getElementById('grids');
+  const mel = document.getElementById('melSection');
+  const tor = document.getElementById('torSection');
+  const now = new Date();
+
+  const stored = localStorage.getItem('tzgrid-order');
+  let torFirst;
+  if (stored === 'tor' || stored === 'mel') {
+    torFirst = stored === 'tor';
+  } else {
+    // Whichever city's UTC offset is closer to the viewer's own wins.
+    const mine = -now.getTimezoneOffset() * 60000;
+    const dMel = Math.abs(tzOffset(now, MEL) - mine);
+    const dTor = Math.abs(tzOffset(now, TOR) - mine);
+    torFirst = dTor < dMel;
+  }
+  if (torFirst) grids.insertBefore(tor, mel);
+  else grids.insertBefore(mel, tor);
+
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'your timezone';
+  const note = document.getElementById('tzNote');
+  note.innerHTML = 'Detected <b>' + zone + '</b>, so ' +
+    (torFirst ? 'Toronto' : 'Melbourne') + ' is shown first. ' +
+    '<button class="linkish" id="swapOrder">Show ' + (torFirst ? 'Melbourne' : 'Toronto') + ' first</button>';
+  document.getElementById('swapOrder').addEventListener('click', () => {
+    localStorage.setItem('tzgrid-order', torFirst ? 'mel' : 'tor');
+    orderGrids();
+  });
+}
+
+/* ---------- header info ---------- */
+const fmtDate = new Intl.DateTimeFormat('en-AU', {day: 'numeric', month: 'short', year: 'numeric'});
+document.getElementById('weekOf').textContent =
+  fmtDate.format(new Date(mondayUTCmark)) + ' – ' + fmtDate.format(new Date(mondayUTCmark + 6 * 864e5));
+const sampleTs = wallToUtc(weekDates[0].y, weekDates[0].mo, weekDates[0].d, 12, MEL);
+document.getElementById('offsetNote').textContent =
+  'Toronto is currently ' + Math.round((tzOffset(new Date(sampleTs), MEL) - tzOffset(new Date(sampleTs), TOR)) / 36e5) +
+  ' hours behind Melbourne.';
+
+orderGrids();
+updateNow();
+setInterval(updateNow, 30000);
+/* If the day rolls over while the tab is open the reference week is stale — reload. */
+setInterval(() => {
+  const p = tzParts(new Date(), MEL);
+  const monday = Date.UTC(p.y, p.mo - 1, p.d) - DAY_IDX[p.wd] * 864e5;
+  if (monday !== mondayUTCmark) location.reload();
+}, 60000);
+
+boot();
+</script>
+</body>
+</html>
